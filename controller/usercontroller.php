@@ -60,6 +60,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 class UserController
 {
     private $pdo;
+    private $usersTable = "users";
 
     public function __construct()
     {
@@ -70,17 +71,52 @@ class UserController
             $password = '';
 
             $this->pdo = new PDO(
+                "mysql:host=$host;charset=utf8",
+                $username,
+                $password
+            );
+            if ($this->createDatabase($dbname) == false){
+                    die("Error de conexión: ");
+            }
+            $this->pdo = new PDO(
                 "mysql:host=$host;dbname=$dbname;charset=utf8",
                 $username,
                 $password
             );
             $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $this->pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+            $this->createUsersTable($this -> usersTable);
         } catch (PDOException $e) {
             die("Error de conexión: " . $e->getMessage());
         }
     }
 
+    public function createDatabase($name){
+        try{
+            $this->pdo->exec("CREATE DATABASE IF NOT EXISTS $name");
+            return true;
+        } catch (PDOException $e){
+            return false;
+        }
+    }
+
+    public function createUsersTable($tableName) {
+    try {
+        $sql = "
+            CREATE TABLE IF NOT EXISTS $tableName (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(45) NOT NULL,
+                email VARCHAR(45) NOT NULL,
+                password VARCHAR(400) NOT NULL,
+                rol VARCHAR(50) NOT NULL,
+                dni VARCHAR(50) NOT NULL
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+        ";
+        $this->pdo->exec($sql);
+    } catch (PDOException $e) {
+        echo "Error al crear la tabla 'usuarios': " . $e->getMessage();
+    }
+}
     public function listWorkersGirls()
     {
         // 2) Saca todos los registros de workergirl
@@ -407,11 +443,11 @@ class UserController
     {
         $email = $_POST['email'] ?? '';
         $password = $_POST['password'] ?? '';
-
+        $usersTable = $this->usersTable;
         try {
             $stmt = $this->pdo->prepare("
                 SELECT name, email, password, rol, dni 
-                FROM users 
+                FROM $usersTable 
                 WHERE email = :email
             ");
 
@@ -450,6 +486,7 @@ class UserController
         $password = $_POST['password'] ?? '';
         $rol = $_POST["rol"] ?? 'user';
         $dni = $_POST["dni"] ?? '';
+        $usersTable = $this->usersTable;
 
         // Validaciones
         if (empty($username) || empty($email) || empty($password)) {
@@ -466,7 +503,7 @@ class UserController
 
         try {
             // Verificar si el email ya existe
-            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE email = :email");
+            $stmt = $this->pdo->prepare("SELECT id FROM $usersTable WHERE email = :email");
             $stmt->bindParam(':email', $email);
             $stmt->execute();
 
@@ -480,7 +517,7 @@ class UserController
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
             $stmt = $this->pdo->prepare("
-                INSERT INTO users 
+                INSERT INTO $usersTable 
                 (name, email, password, rol, dni) 
                 VALUES (:name, :email, :password, :rol, :dni)
             ");
@@ -530,6 +567,7 @@ class UserController
     $currentPassword = $_POST['actual'] ?? '';
     $newPassword = $_POST['nueva'] ?? '';
     $confirmPassword = $_POST['confirmar'] ?? '';
+    $usersTable = $this->usersTable;
 
     // Validaciones
     if (empty($currentPassword) || empty($newPassword) || empty($confirmPassword)) {
@@ -545,7 +583,7 @@ class UserController
 
     try {
         // Obtener usuario desde la base de datos
-        $stmt = $this->pdo->prepare("SELECT password FROM users WHERE email = :email");
+        $stmt = $this->pdo->prepare("SELECT password FROM $usersTable WHERE email = :email");
         $stmt->bindParam(':email', $email);
         $stmt->execute();
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -565,7 +603,7 @@ class UserController
         $hashedNewPassword = password_hash($newPassword, PASSWORD_DEFAULT);
 
         // Actualizar contraseña
-        $stmt = $this->pdo->prepare("UPDATE users SET password = :password WHERE email = :email");
+        $stmt = $this->pdo->prepare("UPDATE $usersTable SET password = :password WHERE email = :email");
         $stmt->execute([
             ':password' => $hashedNewPassword,
             ':email' => $email
@@ -591,10 +629,11 @@ class UserController
     }
 
     $email = $_SESSION['email'];
+    $usersTable = $this->usersTable;
 
     try {
         // Eliminar la cuenta del usuario
-        $stmt = $this->pdo->prepare("DELETE FROM users WHERE email = :email");
+        $stmt = $this->pdo->prepare("DELETE FROM $usersTable WHERE email = :email");
         $stmt->bindParam(':email', $email);
         $stmt->execute();
 
